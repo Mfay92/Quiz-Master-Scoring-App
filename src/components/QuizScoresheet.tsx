@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Check, X, BarChart3, Trophy, Target, Crown } from 'lucide-react';
 import { RoundFormat } from '../types';
 
@@ -11,10 +11,13 @@ interface Round {
   questionFormat: string;
   answers: string[];
   correct: (boolean | null)[];
+  halfPoints: (boolean | null)[]; // For 0.5 point partial answers
   secondAnswers: string[];
   secondCorrect: (boolean | null)[];
   topFiveAnswers: string[][];
   topFiveCorrect: (boolean | null)[][];
+  countdownAnswers: string[][]; // For 5-4-3-2-1 format
+  countdownCorrect: (boolean | null)[][];
   connectionScoring?: number[];
 }
 
@@ -71,37 +74,62 @@ const QuizScoresheet = () => {
     pointsEach: number;
     format: string;
     description: string;
+    maxPoints?: number;
   }> = {
     'General Knowledge': { questions: 10, pointsEach: 1, format: 'single', description: 'Standard single answer questions' },
-    'Picture Round': { questions: 10, pointsEach: 1, format: 'single', description: 'Visual identification questions' },
+    'Picture Round': { questions: 10, pointsEach: 1, format: 'halfpoint', description: '1pt each, 0.5pt for partial (e.g. two flags)' },
+    'Entertainment': { questions: 10, pointsEach: 1, format: 'halfpoint', description: '0.5pt each for song title & artist' },
     'Music Round': { questions: 10, pointsEach: 1, format: 'single', description: '1 point per question' },
-    'Connections Round': { questions: 5, pointsEach: 1, format: 'connection', description: '4 questions (1pt) + connection (2pts)' },
+    'Connections Round': { questions: 5, pointsEach: 1, format: 'connection', description: '4 answers (1pt) + connection (1pt) = 5pts', maxPoints: 5 },
+    'Which Two': { questions: 10, pointsEach: 2, format: 'dual', description: '2pts per Q - name two items (0/1/2)', maxPoints: 20 },
+    'Double Questions': { questions: 10, pointsEach: 1, format: 'dual', description: 'Image + 2 questions = 2pts per item', maxPoints: 20 },
+    'Easy/Hard Round': { questions: 10, pointsEach: 1, format: 'easyhard', description: '1pt Easy + 1pt Hard = 2pts per pair', maxPoints: 20 },
+    'Top 5 Round': { questions: 2, pointsEach: 1, format: 'topfive', description: '2 questions, 5 answers each (10 total)', maxPoints: 10 },
+    '5-4-3-2-1': { questions: 5, pointsEach: 1, format: 'countdown', description: '5+4+3+2+1 answers = 15 points', maxPoints: 15 },
     'True or False': { questions: 10, pointsEach: 1, format: 'single', description: 'Binary T/F questions' },
     'Multiple Choice': { questions: 10, pointsEach: 1, format: 'single', description: '3-4 options per question' },
-    'Easy/Hard Round': { questions: 10, pointsEach: 1, format: 'easyhard', description: '1 point per correct part (easy/hard)' },
+    '1 to 10 Letters': { questions: 10, pointsEach: 1, format: 'single', description: 'Answer length = question number' },
+    'Share the Same Name': { questions: 10, pointsEach: 1, format: 'single', description: 'Identify common name from clues' },
+    'Pictogram Round': { questions: 10, pointsEach: 1, format: 'single', description: 'Visual puzzles - films/phrases' },
+    'Who or What Am I': { questions: 10, pointsEach: 1, format: 'single', description: 'Three-clue identification' },
     'All or Nothing Round': { questions: 10, pointsEach: 1, format: 'allornothing', description: 'Must get both parts for 1 point' },
-    'Top 5 Round': { questions: 2, pointsEach: 1, format: 'topfive', description: '2 questions, 5 answers each (10 total)' },
-    '54321': { questions: 15, pointsEach: 1, format: 'single', description: 'Fast delivery questions' },
-    'Bonus Round': { questions: 1, pointsEach: 5, format: 'single', description: 'Final high-value question' },
+    'Bonus Round': { questions: 5, pointsEach: 1, format: 'single', description: 'Variable bonus questions' },
     'Fill in the Blank': { questions: 10, pointsEach: 1, format: 'single', description: 'Complete the missing word/phrase' },
     'Odd One Out': { questions: 10, pointsEach: 1, format: 'single', description: 'Identify the different item' },
     'What Comes Next?': { questions: 10, pointsEach: 1, format: 'single', description: 'Pattern recognition questions' }
   };
 
+  const createEmptyRound = (num: number): Round => ({
+    number: num,
+    name: `Round ${num}`,
+    format: 'general-knowledge' as RoundFormat,
+    questions: 10,
+    pointsEach: 1,
+    questionFormat: 'single',
+    answers: Array(10).fill(''),
+    correct: Array(10).fill(null),
+    halfPoints: Array(10).fill(null),
+    secondAnswers: Array(10).fill(''),
+    secondCorrect: Array(10).fill(null),
+    topFiveAnswers: Array(2).fill(null).map(() => Array(5).fill('')),
+    topFiveCorrect: Array(2).fill(null).map(() => Array(5).fill(null)),
+    countdownAnswers: [Array(5).fill(''), Array(4).fill(''), Array(3).fill(''), Array(2).fill(''), Array(1).fill('')],
+    countdownCorrect: [Array(5).fill(null), Array(4).fill(null), Array(3).fill(null), Array(2).fill(null), Array(1).fill(null)]
+  });
+
   const [rounds, setRounds] = useState<Round[]>([
-    { number: 1, name: 'Round 1', format: 'general-knowledge', questions: 10, pointsEach: 1, questionFormat: 'single', answers: Array(10).fill(''), correct: Array(10).fill(null), secondAnswers: Array(10).fill(''), secondCorrect: Array(10).fill(null), topFiveAnswers: Array(2).fill(null).map(() => Array(5).fill('')), topFiveCorrect: Array(2).fill(null).map(() => Array(5).fill(null)) },
-    { number: 2, name: 'Round 2', format: 'general-knowledge', questions: 10, pointsEach: 1, questionFormat: 'single', answers: Array(10).fill(''), correct: Array(10).fill(null), secondAnswers: Array(10).fill(''), secondCorrect: Array(10).fill(null), topFiveAnswers: Array(2).fill(null).map(() => Array(5).fill('')), topFiveCorrect: Array(2).fill(null).map(() => Array(5).fill(null)) },
-    { number: 3, name: 'Round 3', format: 'general-knowledge', questions: 10, pointsEach: 1, questionFormat: 'single', answers: Array(10).fill(''), correct: Array(10).fill(null), secondAnswers: Array(10).fill(''), secondCorrect: Array(10).fill(null), topFiveAnswers: Array(2).fill(null).map(() => Array(5).fill('')), topFiveCorrect: Array(2).fill(null).map(() => Array(5).fill(null)) },
-    { number: 4, name: 'Round 4', format: 'general-knowledge', questions: 10, pointsEach: 1, questionFormat: 'single', answers: Array(10).fill(''), correct: Array(10).fill(null), secondAnswers: Array(10).fill(''), secondCorrect: Array(10).fill(null), topFiveAnswers: Array(2).fill(null).map(() => Array(5).fill('')), topFiveCorrect: Array(2).fill(null).map(() => Array(5).fill(null)) },
-    { number: 5, name: 'Round 5', format: 'general-knowledge', questions: 10, pointsEach: 1, questionFormat: 'single', answers: Array(10).fill(''), correct: Array(10).fill(null), secondAnswers: Array(10).fill(''), secondCorrect: Array(10).fill(null), topFiveAnswers: Array(2).fill(null).map(() => Array(5).fill('')), topFiveCorrect: Array(2).fill(null).map(() => Array(5).fill(null)) },
-    { number: 6, name: 'Round 6', format: 'general-knowledge', questions: 10, pointsEach: 1, questionFormat: 'single', answers: Array(10).fill(''), correct: Array(10).fill(null), secondAnswers: Array(10).fill(''), secondCorrect: Array(10).fill(null), topFiveAnswers: Array(2).fill(null).map(() => Array(5).fill('')), topFiveCorrect: Array(2).fill(null).map(() => Array(5).fill(null)) },
-    { number: 7, name: 'Round 7', format: 'general-knowledge', questions: 10, pointsEach: 1, questionFormat: 'single', answers: Array(10).fill(''), correct: Array(10).fill(null), secondAnswers: Array(10).fill(''), secondCorrect: Array(10).fill(null), topFiveAnswers: Array(2).fill(null).map(() => Array(5).fill('')), topFiveCorrect: Array(2).fill(null).map(() => Array(5).fill(null)) }
+    createEmptyRound(1),
+    createEmptyRound(2),
+    createEmptyRound(3),
+    createEmptyRound(4),
+    createEmptyRound(5),
+    createEmptyRound(6),
+    createEmptyRound(7)
   ]);
 
   const setRoundFormat = (roundIndex: number, formatName: string) => {
     const format = roundFormats[formatName];
     const newRounds = [...rounds];
-    const oldQuestions = newRounds[roundIndex].questions;
 
     newRounds[roundIndex].format = formatName as RoundFormat;
     newRounds[roundIndex].name = formatName;
@@ -109,27 +137,32 @@ const QuizScoresheet = () => {
     newRounds[roundIndex].pointsEach = format.pointsEach;
     newRounds[roundIndex].questionFormat = format.format;
 
+    // Reset arrays based on format
     if (format.format === 'connection') {
-      newRounds[roundIndex].connectionScoring = [1, 1, 1, 1, 2];
-    }
-
-    if (format.format === 'topfive') {
+      newRounds[roundIndex].connectionScoring = [1, 1, 1, 1, 1]; // 4 questions + 1 connection = 5 points
+      newRounds[roundIndex].answers = Array(5).fill('');
+      newRounds[roundIndex].correct = Array(5).fill(null);
+    } else if (format.format === 'topfive') {
       newRounds[roundIndex].topFiveAnswers = Array(2).fill(null).map(() => Array(5).fill(''));
       newRounds[roundIndex].topFiveCorrect = Array(2).fill(null).map(() => Array(5).fill(null));
-    }
-
-    if (format.questions !== oldQuestions) {
-      if (format.questions > oldQuestions) {
-        newRounds[roundIndex].answers = [...newRounds[roundIndex].answers, ...Array(format.questions - oldQuestions).fill('')];
-        newRounds[roundIndex].correct = [...newRounds[roundIndex].correct, ...Array(format.questions - oldQuestions).fill(null)];
-        newRounds[roundIndex].secondAnswers = [...newRounds[roundIndex].secondAnswers, ...Array(format.questions - oldQuestions).fill('')];
-        newRounds[roundIndex].secondCorrect = [...newRounds[roundIndex].secondCorrect, ...Array(format.questions - oldQuestions).fill(null)];
-      } else {
-        newRounds[roundIndex].answers = newRounds[roundIndex].answers.slice(0, format.questions);
-        newRounds[roundIndex].correct = newRounds[roundIndex].correct.slice(0, format.questions);
-        newRounds[roundIndex].secondAnswers = newRounds[roundIndex].secondAnswers.slice(0, format.questions);
-        newRounds[roundIndex].secondCorrect = newRounds[roundIndex].secondCorrect.slice(0, format.questions);
-      }
+    } else if (format.format === 'countdown') {
+      newRounds[roundIndex].countdownAnswers = [Array(5).fill(''), Array(4).fill(''), Array(3).fill(''), Array(2).fill(''), Array(1).fill('')];
+      newRounds[roundIndex].countdownCorrect = [Array(5).fill(null), Array(4).fill(null), Array(3).fill(null), Array(2).fill(null), Array(1).fill(null)];
+    } else if (format.format === 'halfpoint') {
+      newRounds[roundIndex].answers = Array(format.questions).fill('');
+      newRounds[roundIndex].correct = Array(format.questions).fill(null);
+      newRounds[roundIndex].halfPoints = Array(format.questions).fill(null);
+    } else if (format.format === 'dual' || format.format === 'easyhard') {
+      newRounds[roundIndex].answers = Array(format.questions).fill('');
+      newRounds[roundIndex].correct = Array(format.questions).fill(null);
+      newRounds[roundIndex].secondAnswers = Array(format.questions).fill('');
+      newRounds[roundIndex].secondCorrect = Array(format.questions).fill(null);
+    } else {
+      newRounds[roundIndex].answers = Array(format.questions).fill('');
+      newRounds[roundIndex].correct = Array(format.questions).fill(null);
+      newRounds[roundIndex].halfPoints = Array(format.questions).fill(null);
+      newRounds[roundIndex].secondAnswers = Array(format.questions).fill('');
+      newRounds[roundIndex].secondCorrect = Array(format.questions).fill(null);
     }
 
     setRounds(newRounds);
@@ -176,6 +209,24 @@ const QuizScoresheet = () => {
     setRounds(newRounds);
   };
 
+  const markHalfPoint = (roundIndex: number, questionIndex: number, hasHalfPoint: boolean) => {
+    const newRounds = [...rounds];
+    newRounds[roundIndex].halfPoints[questionIndex] = hasHalfPoint;
+    setRounds(newRounds);
+  };
+
+  const updateCountdownAnswer = (roundIndex: number, questionIndex: number, answerIndex: number, answer: string) => {
+    const newRounds = [...rounds];
+    newRounds[roundIndex].countdownAnswers[questionIndex][answerIndex] = answer;
+    setRounds(newRounds);
+  };
+
+  const markCountdownAnswer = (roundIndex: number, questionIndex: number, answerIndex: number, isCorrect: boolean) => {
+    const newRounds = [...rounds];
+    newRounds[roundIndex].countdownCorrect[questionIndex][answerIndex] = isCorrect;
+    setRounds(newRounds);
+  };
+
   const endQuiz = () => {
     setShowResults(true);
   };
@@ -184,13 +235,13 @@ const QuizScoresheet = () => {
     setShowResults(false);
     setCurrentRound(1);
     setRounds([
-      { number: 1, name: 'Round 1', format: 'general-knowledge', questions: 10, pointsEach: 1, questionFormat: 'single', answers: Array(10).fill(''), correct: Array(10).fill(null), secondAnswers: Array(10).fill(''), secondCorrect: Array(10).fill(null), topFiveAnswers: Array(2).fill(null).map(() => Array(5).fill('')), topFiveCorrect: Array(2).fill(null).map(() => Array(5).fill(null)) },
-      { number: 2, name: 'Round 2', format: 'general-knowledge', questions: 10, pointsEach: 1, questionFormat: 'single', answers: Array(10).fill(''), correct: Array(10).fill(null), secondAnswers: Array(10).fill(''), secondCorrect: Array(10).fill(null), topFiveAnswers: Array(2).fill(null).map(() => Array(5).fill('')), topFiveCorrect: Array(2).fill(null).map(() => Array(5).fill(null)) },
-      { number: 3, name: 'Round 3', format: 'general-knowledge', questions: 10, pointsEach: 1, questionFormat: 'single', answers: Array(10).fill(''), correct: Array(10).fill(null), secondAnswers: Array(10).fill(''), secondCorrect: Array(10).fill(null), topFiveAnswers: Array(2).fill(null).map(() => Array(5).fill('')), topFiveCorrect: Array(2).fill(null).map(() => Array(5).fill(null)) },
-      { number: 4, name: 'Round 4', format: 'general-knowledge', questions: 10, pointsEach: 1, questionFormat: 'single', answers: Array(10).fill(''), correct: Array(10).fill(null), secondAnswers: Array(10).fill(''), secondCorrect: Array(10).fill(null), topFiveAnswers: Array(2).fill(null).map(() => Array(5).fill('')), topFiveCorrect: Array(2).fill(null).map(() => Array(5).fill(null)) },
-      { number: 5, name: 'Round 5', format: 'general-knowledge', questions: 10, pointsEach: 1, questionFormat: 'single', answers: Array(10).fill(''), correct: Array(10).fill(null), secondAnswers: Array(10).fill(''), secondCorrect: Array(10).fill(null), topFiveAnswers: Array(2).fill(null).map(() => Array(5).fill('')), topFiveCorrect: Array(2).fill(null).map(() => Array(5).fill(null)) },
-      { number: 6, name: 'Round 6', format: 'general-knowledge', questions: 10, pointsEach: 1, questionFormat: 'single', answers: Array(10).fill(''), correct: Array(10).fill(null), secondAnswers: Array(10).fill(''), secondCorrect: Array(10).fill(null), topFiveAnswers: Array(2).fill(null).map(() => Array(5).fill('')), topFiveCorrect: Array(2).fill(null).map(() => Array(5).fill(null)) },
-      { number: 7, name: 'Round 7', format: 'general-knowledge', questions: 10, pointsEach: 1, questionFormat: 'single', answers: Array(10).fill(''), correct: Array(10).fill(null), secondAnswers: Array(10).fill(''), secondCorrect: Array(10).fill(null), topFiveAnswers: Array(2).fill(null).map(() => Array(5).fill('')), topFiveCorrect: Array(2).fill(null).map(() => Array(5).fill(null)) }
+      createEmptyRound(1),
+      createEmptyRound(2),
+      createEmptyRound(3),
+      createEmptyRound(4),
+      createEmptyRound(5),
+      createEmptyRound(6),
+      createEmptyRound(7)
     ]);
     setTeamName('');
     setQuizDate(new Date().toLocaleDateString());
@@ -200,14 +251,15 @@ const QuizScoresheet = () => {
     let score = 0;
 
     if (round.questionFormat === 'connection') {
-      for (let i = 0; i < 4; i++) {
+      // 4 questions + 1 connection = 5 points total (1 point each)
+      for (let i = 0; i < 5; i++) {
         if (round.correct[i] === true) score += 1;
       }
-      if (round.correct[4] === true) score += 2;
     } else if (round.questionFormat === 'dual' || round.questionFormat === 'easyhard') {
+      // 1 point per correct answer (2 answers per question)
       for (let i = 0; i < round.questions; i++) {
-        if (round.correct[i] === true) score += round.pointsEach;
-        if (round.secondCorrect[i] === true) score += round.pointsEach;
+        if (round.correct[i] === true) score += 1;
+        if (round.secondCorrect[i] === true) score += 1;
       }
     } else if (round.questionFormat === 'allornothing') {
       for (let i = 0; i < round.questions; i++) {
@@ -219,6 +271,23 @@ const QuizScoresheet = () => {
       for (let i = 0; i < 2; i++) {
         for (let j = 0; j < 5; j++) {
           if (round.topFiveCorrect[i][j] === true) score += 1;
+        }
+      }
+    } else if (round.questionFormat === 'countdown') {
+      // 5-4-3-2-1 format: 15 total answers
+      const answerCounts = [5, 4, 3, 2, 1];
+      for (let i = 0; i < 5; i++) {
+        for (let j = 0; j < answerCounts[i]; j++) {
+          if (round.countdownCorrect[i][j] === true) score += 1;
+        }
+      }
+    } else if (round.questionFormat === 'halfpoint') {
+      // 1 point for correct, 0.5 for half point
+      for (let i = 0; i < round.questions; i++) {
+        if (round.correct[i] === true) {
+          score += 1;
+        } else if (round.halfPoints[i] === true) {
+          score += 0.5;
         }
       }
     } else {
@@ -235,15 +304,28 @@ const QuizScoresheet = () => {
   const calculateTotalPossible = () => {
     return rounds.reduce((total, round) => {
       if (round.questionFormat === 'connection') {
-        return total + 6;
+        return total + 5; // 4 questions + 1 connection = 5 points
       } else if (round.questionFormat === 'dual' || round.questionFormat === 'easyhard') {
-        return total + (round.questions * round.pointsEach * 2);
+        return total + (round.questions * 2); // 2 points per question
       } else if (round.questionFormat === 'topfive') {
         return total + 10;
+      } else if (round.questionFormat === 'countdown') {
+        return total + 15; // 5+4+3+2+1 = 15
+      } else if (round.questionFormat === 'halfpoint') {
+        return total + round.questions; // Max 1 point each
       } else {
         return total + (round.questions * round.pointsEach);
       }
     }, 0);
+  };
+
+  const getRoundMaxPoints = (round: Round) => {
+    if (round.questionFormat === 'connection') return 5;
+    if (round.questionFormat === 'dual' || round.questionFormat === 'easyhard') return round.questions * 2;
+    if (round.questionFormat === 'topfive') return 10;
+    if (round.questionFormat === 'countdown') return 15;
+    if (round.questionFormat === 'halfpoint') return round.questions;
+    return round.questions * round.pointsEach;
   };
 
   const getPercentage = () => {
@@ -255,17 +337,7 @@ const QuizScoresheet = () => {
   const getRoundStats = () => {
     const roundPerformances = rounds.map(round => {
       const score = calculateRoundScore(round);
-      let possible;
-
-      if (round.questionFormat === 'connection') {
-        possible = 6;
-      } else if (round.questionFormat === 'dual' || round.questionFormat === 'easyhard') {
-        possible = round.questions * round.pointsEach * 2;
-      } else if (round.questionFormat === 'topfive') {
-        possible = 10;
-      } else {
-        possible = round.questions * round.pointsEach;
-      }
+      const possible = getRoundMaxPoints(round);
 
       return {
         name: round.format,
@@ -388,6 +460,9 @@ const QuizScoresheet = () => {
                       {round.type === 'connection' ? 'Connection Round' :
                        round.type === 'easyhard' ? 'Easy/Hard Round' :
                        round.type === 'topfive' ? 'Top 5 Round' :
+                       round.type === 'countdown' ? '5-4-3-2-1 Round' :
+                       round.type === 'halfpoint' ? 'Half Point Round' :
+                       round.type === 'dual' ? 'Which Two Round' :
                        round.type === 'allornothing' ? 'All or Nothing' : 'Standard'}
                     </div>
                   )}
@@ -481,10 +556,7 @@ const QuizScoresheet = () => {
               >
                 {round.name}
                 <span className="block text-xs mt-1">
-                  {calculateRoundScore(round)}/{round.questionFormat === 'connection' ? 6 :
-                    round.questionFormat === 'easyhard' ? round.questions * 2 :
-                    round.questionFormat === 'topfive' ? 10 :
-                    round.questions * round.pointsEach}
+                  {calculateRoundScore(round)}/{getRoundMaxPoints(round)}
                 </span>
               </button>
             ))}
@@ -522,7 +594,55 @@ const QuizScoresheet = () => {
                 </p>
               </div>
 
-              {round.questionFormat === 'topfive' ? (
+              {round.questionFormat === 'countdown' ? (
+                <div className="space-y-6">
+                  {[5, 4, 3, 2, 1].map((answerCount, questionIndex) => (
+                    <div key={questionIndex} className="bg-white/5 p-4 rounded-xl border border-white/10">
+                      <div className="flex items-center mb-3">
+                        <div className="bg-gradient-to-r from-orange-500 to-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mr-3">
+                          {answerCount}
+                        </div>
+                        <h3 className="text-lg font-bold text-white">Name {answerCount} answers</h3>
+                      </div>
+
+                      <div className="space-y-2">
+                        {Array.from({ length: answerCount }, (_, answerIndex) => (
+                          <div key={answerIndex} className="flex items-center space-x-2">
+                            <span className="text-white/80 text-sm w-4">{answerIndex + 1}.</span>
+                            <input
+                              type="text"
+                              placeholder={`Answer ${answerIndex + 1}...`}
+                              value={round.countdownAnswers[questionIndex][answerIndex]}
+                              onChange={(e) => updateCountdownAnswer(roundIndex, questionIndex, answerIndex, e.target.value)}
+                              className="flex-1 px-3 py-2 bg-white/10 border border-white/30 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-yellow-400/50 transition-all text-sm"
+                            />
+                            <button
+                              onClick={() => markCountdownAnswer(roundIndex, questionIndex, answerIndex, true)}
+                              className={`p-2 rounded-lg transition-all transform active:scale-95 ${
+                                round.countdownCorrect[questionIndex][answerIndex] === true
+                                  ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg'
+                                  : 'bg-white/10 text-white/60 border border-white/30'
+                              }`}
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => markCountdownAnswer(roundIndex, questionIndex, answerIndex, false)}
+                              className={`p-2 rounded-lg transition-all transform active:scale-95 ${
+                                round.countdownCorrect[questionIndex][answerIndex] === false
+                                  ? 'bg-gradient-to-r from-red-500 to-pink-600 text-white shadow-lg'
+                                  : 'bg-white/10 text-white/60 border border-white/30'
+                              }`}
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : round.questionFormat === 'topfive' ? (
                 <div className="space-y-6">
                   {[0, 1].map((questionIndex) => (
                     <div key={questionIndex} className="bg-white/5 p-4 rounded-xl border border-white/10">
@@ -601,7 +721,7 @@ const QuizScoresheet = () => {
                         />
                       </div>
 
-                      {(round.questionFormat === 'easyhard' || round.questionFormat === 'allornothing') && (
+                      {(round.questionFormat === 'easyhard' || round.questionFormat === 'dual' || round.questionFormat === 'allornothing') && (
                         <div className="flex items-center space-x-3 mb-2 ml-11">
                           <input
                             type="text"
@@ -618,72 +738,118 @@ const QuizScoresheet = () => {
                       )}
 
                       <div className="flex space-x-2 justify-center">
-                        <div className="flex space-x-1 flex-1">
-                          <button
-                            onClick={() => markQuestion(roundIndex, questionIndex, true)}
-                            className={`flex-1 py-2 px-2 rounded-lg transition-all transform active:scale-95 flex items-center justify-center text-xs ${
-                              round.correct[questionIndex] === true
-                                ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg'
-                                : 'bg-white/10 text-white/60 border border-white/30'
-                            }`}
-                          >
-                            <Check className="w-3 h-3 mr-1" />
-                            {round.questionFormat === 'easyhard' ? 'Easy ✓' :
-                             round.questionFormat === 'allornothing' ? '1st ✓' : 'Correct'}
-                          </button>
-
-                          <button
-                            onClick={() => markQuestion(roundIndex, questionIndex, false)}
-                            className={`flex-1 py-2 px-2 rounded-lg transition-all transform active:scale-95 flex items-center justify-center text-xs ${
-                              round.correct[questionIndex] === false
-                                ? 'bg-gradient-to-r from-red-500 to-pink-600 text-white shadow-lg'
-                                : 'bg-white/10 text-white/60 border border-white/30'
-                            }`}
-                          >
-                            <X className="w-3 h-3 mr-1" />
-                            {round.questionFormat === 'easyhard' ? 'Easy ✗' :
-                             round.questionFormat === 'allornothing' ? '1st ✗' : 'Wrong'}
-                          </button>
-                        </div>
-
-                        {(round.questionFormat === 'easyhard' || round.questionFormat === 'allornothing') && (
+                        {round.questionFormat === 'halfpoint' ? (
                           <div className="flex space-x-1 flex-1">
                             <button
-                              onClick={() => markSecondQuestion(roundIndex, questionIndex, true)}
+                              onClick={() => { markQuestion(roundIndex, questionIndex, true); markHalfPoint(roundIndex, questionIndex, false); }}
                               className={`flex-1 py-2 px-2 rounded-lg transition-all transform active:scale-95 flex items-center justify-center text-xs ${
-                                round.secondCorrect[questionIndex] === true
+                                round.correct[questionIndex] === true
                                   ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg'
                                   : 'bg-white/10 text-white/60 border border-white/30'
                               }`}
                             >
                               <Check className="w-3 h-3 mr-1" />
-                              {round.questionFormat === 'easyhard' ? 'Hard ✓' : '2nd ✓'}
+                              Full 1pt
                             </button>
-
                             <button
-                              onClick={() => markSecondQuestion(roundIndex, questionIndex, false)}
+                              onClick={() => { markQuestion(roundIndex, questionIndex, false); markHalfPoint(roundIndex, questionIndex, true); }}
                               className={`flex-1 py-2 px-2 rounded-lg transition-all transform active:scale-95 flex items-center justify-center text-xs ${
-                                round.secondCorrect[questionIndex] === false
+                                round.halfPoints[questionIndex] === true
+                                  ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white shadow-lg'
+                                  : 'bg-white/10 text-white/60 border border-white/30'
+                              }`}
+                            >
+                              ½
+                              Half 0.5
+                            </button>
+                            <button
+                              onClick={() => { markQuestion(roundIndex, questionIndex, false); markHalfPoint(roundIndex, questionIndex, false); }}
+                              className={`flex-1 py-2 px-2 rounded-lg transition-all transform active:scale-95 flex items-center justify-center text-xs ${
+                                round.correct[questionIndex] === false && round.halfPoints[questionIndex] !== true
                                   ? 'bg-gradient-to-r from-red-500 to-pink-600 text-white shadow-lg'
                                   : 'bg-white/10 text-white/60 border border-white/30'
                               }`}
                             >
                               <X className="w-3 h-3 mr-1" />
-                              {round.questionFormat === 'easyhard' ? 'Hard ✗' : '2nd ✗'}
+                              Wrong
                             </button>
                           </div>
+                        ) : (
+                          <>
+                            <div className="flex space-x-1 flex-1">
+                              <button
+                                onClick={() => markQuestion(roundIndex, questionIndex, true)}
+                                className={`flex-1 py-2 px-2 rounded-lg transition-all transform active:scale-95 flex items-center justify-center text-xs ${
+                                  round.correct[questionIndex] === true
+                                    ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg'
+                                    : 'bg-white/10 text-white/60 border border-white/30'
+                                }`}
+                              >
+                                <Check className="w-3 h-3 mr-1" />
+                                {round.questionFormat === 'easyhard' ? 'Easy ✓' :
+                                 round.questionFormat === 'dual' ? '1st ✓' :
+                                 round.questionFormat === 'allornothing' ? '1st ✓' : 'Correct'}
+                              </button>
+
+                              <button
+                                onClick={() => markQuestion(roundIndex, questionIndex, false)}
+                                className={`flex-1 py-2 px-2 rounded-lg transition-all transform active:scale-95 flex items-center justify-center text-xs ${
+                                  round.correct[questionIndex] === false
+                                    ? 'bg-gradient-to-r from-red-500 to-pink-600 text-white shadow-lg'
+                                    : 'bg-white/10 text-white/60 border border-white/30'
+                                }`}
+                              >
+                                <X className="w-3 h-3 mr-1" />
+                                {round.questionFormat === 'easyhard' ? 'Easy ✗' :
+                                 round.questionFormat === 'dual' ? '1st ✗' :
+                                 round.questionFormat === 'allornothing' ? '1st ✗' : 'Wrong'}
+                              </button>
+                            </div>
+
+                            {(round.questionFormat === 'easyhard' || round.questionFormat === 'dual' || round.questionFormat === 'allornothing') && (
+                              <div className="flex space-x-1 flex-1">
+                                <button
+                                  onClick={() => markSecondQuestion(roundIndex, questionIndex, true)}
+                                  className={`flex-1 py-2 px-2 rounded-lg transition-all transform active:scale-95 flex items-center justify-center text-xs ${
+                                    round.secondCorrect[questionIndex] === true
+                                      ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg'
+                                      : 'bg-white/10 text-white/60 border border-white/30'
+                                  }`}
+                                >
+                                  <Check className="w-3 h-3 mr-1" />
+                                  {round.questionFormat === 'easyhard' ? 'Hard ✓' : '2nd ✓'}
+                                </button>
+
+                                <button
+                                  onClick={() => markSecondQuestion(roundIndex, questionIndex, false)}
+                                  className={`flex-1 py-2 px-2 rounded-lg transition-all transform active:scale-95 flex items-center justify-center text-xs ${
+                                    round.secondCorrect[questionIndex] === false
+                                      ? 'bg-gradient-to-r from-red-500 to-pink-600 text-white shadow-lg'
+                                      : 'bg-white/10 text-white/60 border border-white/30'
+                                  }`}
+                                >
+                                  <X className="w-3 h-3 mr-1" />
+                                  {round.questionFormat === 'easyhard' ? 'Hard ✗' : '2nd ✗'}
+                                </button>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
 
-                      {(round.questionFormat === 'connection' || round.questionFormat === 'easyhard' || round.questionFormat === 'allornothing') && (
+                      {(round.questionFormat === 'connection' || round.questionFormat === 'easyhard' || round.questionFormat === 'dual' || round.questionFormat === 'allornothing' || round.questionFormat === 'halfpoint') && (
                         <div className="mt-2 text-center">
                           <span className="text-xs text-white/60">
                             {round.questionFormat === 'connection' && questionIndex === 4
-                              ? `Connection: ${round.correct[questionIndex] === true ? '2pts' : '0pts'}`
-                              : round.questionFormat === 'easyhard'
+                              ? `Connection: ${round.correct[questionIndex] === true ? '1pt' : '0pts'}`
+                              : round.questionFormat === 'connection'
+                              ? `Score: ${round.correct[questionIndex] === true ? '1pt' : '0pts'}`
+                              : round.questionFormat === 'easyhard' || round.questionFormat === 'dual'
                               ? `Score: ${(round.correct[questionIndex] === true ? 1 : 0) + (round.secondCorrect[questionIndex] === true ? 1 : 0)}pts`
                               : round.questionFormat === 'allornothing'
                               ? `Score: ${(round.correct[questionIndex] === true && round.secondCorrect[questionIndex] === true) ? 1 : 0}pts`
+                              : round.questionFormat === 'halfpoint'
+                              ? `Score: ${round.correct[questionIndex] === true ? '1pt' : round.halfPoints[questionIndex] === true ? '0.5pt' : '0pts'}`
                               : ''
                             }
                           </span>
@@ -697,18 +863,12 @@ const QuizScoresheet = () => {
               <div className="mt-4 text-center">
                 <div className="bg-gradient-to-r from-purple-500 to-pink-600 p-3 rounded-xl">
                   <div className="text-lg font-bold text-white">
-                    🎯 Round: {calculateRoundScore(round)}/{round.questionFormat === 'connection' ? 6 :
-                      round.questionFormat === 'easyhard' ? round.questions * 2 :
-                      round.questionFormat === 'topfive' ? 10 :
-                      round.questions * round.pointsEach}
+                    🎯 Round: {calculateRoundScore(round)}/{getRoundMaxPoints(round)}
                   </div>
                   <div className="text-sm text-white/90">
                     ({(() => {
                       const score = calculateRoundScore(round);
-                      const possible = round.questionFormat === 'connection' ? 6 :
-                        round.questionFormat === 'easyhard' ? round.questions * 2 :
-                        round.questionFormat === 'topfive' ? 10 :
-                        round.questions * round.pointsEach;
+                      const possible = getRoundMaxPoints(round);
                       return possible > 0 ? Math.round((score / possible) * 100) : 0;
                     })()}%)
                   </div>

@@ -14,7 +14,7 @@ interface QuizAttempt {
   completed_at?: string;
 }
 
-interface QuizScore {
+interface _QuizScore {
   id: string;
   quiz_attempt_id: string;
   round_number: number;
@@ -23,6 +23,9 @@ interface QuizScore {
   round_score: number;
   max_round_score: number;
 }
+
+// Export for future use
+export type QuizScore = _QuizScore;
 
 export const useQuizzes = () => {
   const { user } = useAuth();

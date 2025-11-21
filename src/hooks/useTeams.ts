@@ -11,12 +11,15 @@ interface Team {
   created_at: string;
 }
 
-interface TeamMember {
+interface _TeamMember {
   id: string;
   team_id: string;
   user_id: string;
   joined_at: string;
 }
+
+// Export for future use
+export type TeamMember = _TeamMember;
 
 export const useTeams = () => {
   const { user } = useAuth();
