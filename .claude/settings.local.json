@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(dir:*)",
+      "Bash(npm install)",
+      "Bash(npm run dev:*)",
+      "Bash(timeout 5 bash -c 'sleep 3 && curl -s http://localhost:5173')"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
